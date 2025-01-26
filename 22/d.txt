@@ -1,0 +1,24 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  dockerId: 'kaan123'
+  containerName: 'spring-petclinic'
+  dockerPassword: 123
+
+steps:
+- checkout: self
+
+- script: |
+    echo "Building Docker image..."
+    docker build -t $(dockerId)/$(containerName):$(Build.BuildId) .
+    
+    echo "Logging in to Docker Hub..."
+    echo $(dockerPassword) | docker login --username $(dockerId) --password-stdin
+    
+    echo "Pushing Docker image to Docker Hub..."
+    docker push $(dockerId)/$(containerName):$(Build.BuildId)
+

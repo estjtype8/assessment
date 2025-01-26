@@ -1,0 +1,97 @@
+---
+- name: Common Setup for All Nodes
+  hosts: k8s-cluster
+  become: yes
+  tasks:
+    - name: Disable Swap
+      shell: |
+        swapoff -a
+        sed -i '/swap/d' /etc/fstab
+      args:
+        warn: false
+
+    - name: Load Kernel Modules for Kubernetes
+      shell: |
+        modprobe overlay
+        modprobe br_netfilter
+      args:
+        warn: false
+
+    - name: Set sysctl params for Kubernetes networking
+      copy:
+        dest: /etc/sysctl.d/k8s.conf
+        content: |
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.bridge.bridge-nf-call-iptables = 1
+      register: k8s_sysctl
+
+    - name: Apply new sysctl params
+      command: sysctl --system
+      when: k8s_sysctl.changed
+
+    - name: Install Dependencies
+      apt:
+        name: [ "apt-transport-https", "ca-certificates", "curl", "gnupg" ]
+        state: present
+        update_cache: yes
+
+    - name: Add Kubernetes apt key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Add Kubernetes apt repository
+      apt_repository:
+        repo: "deb https://apt.kubernetes.io/ kubernetes-xenial main"
+        state: present
+
+    - name: Install kubelet, kubeadm, and kubectl
+      apt:
+        name: ['kubelet', 'kubeadm', 'kubectl']
+        state: present
+        update_cache: yes
+
+    - name: Hold kube packages at current version
+      apt:
+        name: ['kubelet', 'kubeadm', 'kubectl']
+        state: present
+        mark_hold: yes
+
+
+- name: Configure Kubernetes Master
+  hosts: master
+  become: yes
+  tasks:
+    - name: Initialize Kubernetes Master
+      shell: |
+        kubeadm init --pod-network-cidr=10.244.0.0/16
+      register: k8s_init
+
+    - name: Create .kube directory for root
+      file:
+        path: /root/.kube
+        state: directory
+        mode: '0700'
+
+    - name: Copy Kube Config
+      shell: |
+        cp /etc/kubernetes/admin.conf /root/.kube/config
+        chown root:root /root/.kube/config
+
+    - name: Extract Join Command
+      set_fact:
+        join_command: "{{ k8s_init.stdout_lines | last }}"
+
+    - name: Install Pod Network (Flannel)
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+
+
+- name: Configure Kubernetes Workers
+  hosts: workers
+  become: yes
+  tasks:
+    - name: Join Worker Nodes to the Cluster
+      shell: "{{ hostvars[groups['master'][0]].join_command }}"
+      args:
+        warn: false

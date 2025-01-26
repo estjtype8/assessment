@@ -1,0 +1,27 @@
+#!/bin/bash
+
+LOG_FILE="/opt/scripts/zenigma.log"
+KILLER_LOG="/opt/scripts/killer.log"
+
+WRITER_SCRIPT="zenigma_writer.sh"
+
+LINE_COUNT=$(wc -l "$LOG_FILE" 2>/dev/null | awk '{print $1}')
+
+
+if [ -z "$LINE_COUNT" ]; then
+  echo "Error: Could not read line count from $LOG_FILE (file may not exist)."
+  exit 1
+fi
+
+
+if [ "$LINE_COUNT" -ge 20 ]; then
+    echo "$(date) - line count: $LINE_COUNT - Attempting to kill writer script." >> "$KILLER_LOG"
+    pkill -f "$WRITER_SCRIPT"
+    echo "$(date) - line count: $LINE_COUNT - Deleting $LOG_FILE now." >> "$KILLER_LOG"
+    rm -f "$LOG_FILE"
+    echo "$(date) - line count: $LINE_COUNT - Restarting $WRITER_SCRIPT." >> "$KILLER_LOG"
+    nohup ./"$WRITER_SCRIPT" > /dev/null 2>&1 &
+    echo "$(date) - line count: $LINE_COUNT - Done! File deleted and script restarted." >> "$KILLER_LOG"
+else
+    echo "$(date) - line count: $LINE_COUNT - No action needed." >> "$KILLER_LOG"
+fi

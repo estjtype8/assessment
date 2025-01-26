@@ -1,0 +1,21 @@
+#!/bin/bash
+
+LOG_FILE="/tmp/zenigma.log"
+
+
+WRITER_SCRIPT="/opt/scripts/zenigma_writer.sh"
+
+if [ -f "$LOG_FILE" ]; then
+    LINE_COUNT=$(wc -l < "$LOG_FILE")
+
+    if [ "$LINE_COUNT" -ge 20 ]; then
+        pkill -f "$WRITER_SCRIPT"
+        rm -f "$LOG_FILE""
+
+        nohup "$WRITER_SCRIPT" > /dev/null 2>&1 &
+    else
+        echo "Line count is $LINE_COUNT, less than 20."
+    fi
+else
+    echo "File $LOG_FILE does not exist."
+fi
